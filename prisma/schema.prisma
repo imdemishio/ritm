@@ -1,0 +1,256 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String @id @default(cuid())
+  email         String @unique
+  username      String @unique
+  passwordHash  String
+  name          String
+  bio           String @default("")
+  avatar        String?
+  createdAt     DateTime @default(now())
+  authVersion   Int @default(0)
+  settings      UserSettings?
+  preferences   NotificationPreference?
+  sessions      Session[]
+  habits        Habit[]
+  sent          Friendship[] @relation("sender")
+  received      Friendship[] @relation("recipient")
+  challenges    Challenge[]
+  memberships   ChallengeMember[]
+  achievements  UserAchievement[]
+  activities    Activity[]
+  reactions     Reaction[]
+  notifications Notification[]
+  subscriptions PushSubscription[]
+  xp            XPTransaction[]
+  resets        PasswordReset[]
+  habitInvites  HabitInvite[]
+}
+
+model Session {
+  sessionToken String @id
+  userId       String
+  expires      DateTime
+  user         User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+}
+
+model UserSettings {
+  userId      String @id
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  theme       String @default("dark")
+  accent      String @default("#B6F36B")
+  timezone    String @default("UTC")
+  privacy     String @default("friends")
+  onboarded   Boolean @default(false)
+}
+
+model NotificationPreference {
+  userId       String @id
+  user         User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reminders    Boolean @default(true)
+  social       Boolean @default(true)
+  achievements Boolean @default(true)
+}
+
+model Habit {
+  id          String @id @default(cuid())
+  userId      String
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  description String @default("")
+  icon        String
+  color       String
+  category    String
+  kind        String
+  target      Int
+  unit        String @default("")
+  start       String
+  end         String?
+  reminder    String?
+  visibility  String @default("private")
+  archived    String?
+  position    Int @default(0)
+  linkedHabitId String?
+  linkedHabit Habit? @relation("sharedHabit", fields: [linkedHabitId], references: [id], onDelete: SetNull)
+  linkedCopies Habit[] @relation("sharedHabit")
+  schedule    HabitSchedule?
+  logs        HabitLog[]
+  invites     HabitInvite[]
+  @@index([userId, position])
+  @@index([linkedHabitId])
+}
+
+model HabitSchedule {
+  habitId String @id
+  habit   Habit @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  mode    String
+  days    Int[]
+  quota   Int
+  dates   String[]
+}
+
+model HabitLog {
+  habitId String
+  day     String
+  value   Int
+  habit   Habit @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  @@id([habitId, day])
+  @@index([day])
+}
+
+model HabitInvite {
+  habitId String
+  userId  String
+  status  String @default("pending")
+  habit   Habit @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  user    User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([habitId, userId])
+  @@index([userId, status])
+}
+
+model Friendship {
+  id          String @id @default(cuid())
+  pair        String @unique
+  senderId    String
+  recipientId String
+  status      String @default("pending")
+  createdAt   DateTime @default(now())
+  sender      User @relation("sender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient   User @relation("recipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  @@index([senderId, status])
+  @@index([recipientId, status])
+}
+
+model Challenge {
+  id          String @id @default(cuid())
+  ownerId     String
+  owner       User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title       String
+  description String
+  icon        String
+  start       String
+  end         String
+  rules       String
+  mode        String
+  code        String @unique @default(uuid())
+  members     ChallengeMember[]
+  @@index([ownerId])
+}
+
+model ChallengeMember {
+  challengeId String
+  userId      String
+  status      String @default("active")
+  challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  days        ChallengeCheck[]
+  @@id([challengeId, userId])
+  @@index([userId, status])
+}
+
+model ChallengeCheck {
+  challengeId String
+  userId      String
+  day         String
+  createdAt   DateTime @default(now())
+  member      ChallengeMember @relation(fields: [challengeId, userId], references: [challengeId, userId], onDelete: Cascade)
+  @@id([challengeId, userId, day])
+}
+
+model Achievement {
+  id          String @id
+  title       String
+  description String
+  icon        String
+  users       UserAchievement[]
+}
+
+model UserAchievement {
+  userId        String
+  achievementId String
+  createdAt     DateTime @default(now())
+  user          User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  @@id([userId, achievementId])
+}
+
+model Activity {
+  id         String @id @default(cuid())
+  userId     String
+  user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind       String
+  title      String
+  icon       String
+  sourceId   String?
+  eventKey   String
+  createdAt  DateTime @default(now())
+  reactions  Reaction[]
+  @@unique([userId, eventKey])
+  @@index([userId, createdAt])
+}
+
+model Reaction {
+  activityId String
+  userId     String
+  emoji      String
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([activityId, userId, emoji])
+}
+
+model Notification {
+  id        String @id @default(cuid())
+  userId    String
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String
+  text      String
+  dedupe    String
+  href      String @default("/")
+  read      Boolean @default(false)
+  createdAt DateTime @default(now())
+  @@unique([userId, dedupe])
+  @@index([userId, createdAt])
+}
+
+model PushSubscription {
+  endpoint String @id
+  userId   String
+  user     User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  p256dh   String
+  auth     String
+  @@index([userId])
+}
+
+model XPTransaction {
+  id        String @id @default(cuid())
+  userId    String
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventKey  String
+  amount    Int
+  createdAt DateTime @default(now())
+  @@unique([userId, eventKey])
+}
+
+model PasswordReset {
+  tokenHash String @id
+  userId    String
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires   DateTime
+  @@index([userId])
+}
+
+model RateLimit {
+  key     String @id
+  count   Int
+  expires DateTime
+  @@index([expires])
+}
